@@ -1,33 +1,28 @@
 ---
 title: Compaction
-summary: "In this page, we describe async compaction in Hudi."
 toc: true
 last_modified_at:
 ---
 
-For Merge-On-Read table, data is stored using a combination of columnar (e.g parquet) + row based (e.g avro) file formats.
-Updates are logged to delta files & later compacted to produce new versions of columnar files synchronously or
-asynchronously. One of the main motivations behind Merge-On-Read is to reduce data latency when ingesting records.
-Hence, it makes sense to run compaction asynchronously without blocking ingestion.
-
+Compaction is executed asynchronously with Hudi by default. See the [synchronous compaction](/docs/compaction##synchronous-compaction)
+section below if you want to change that default.   
 
 ## Async Compaction
-
 Async Compaction is performed in 2 steps:
 
 1. ***Compaction Scheduling***: This is done by the ingestion job. In this step, Hudi scans the partitions and selects **file
    slices** to be compacted. A compaction plan is finally written to Hudi timeline.
 1. ***Compaction Execution***: A separate process reads the compaction plan and performs compaction of file slices.
 
+## Scheduling Async Compaction
 
-## Deployment Models
+There are few ways by which we can schedule compactions to the Hudi timeline to be executed later asynchronously.
+(Note we can still execute synchronously)
 
-There are few ways by which we can execute compactions asynchronously.
-
-### Spark Structured Streaming
+### Schedule compaction with Spark Structured Streaming
 
 With 0.6.0, we now have support for running async compactions in Spark
-Structured Streaming jobs. Compactions are scheduled and executed asynchronously inside the
+Structured Streaming jobs. Compactions are scheduled asynchronously inside the
 streaming job.  Async Compactions are enabled by default for structured streaming jobs
 on Merge-On-Read table.
 
@@ -56,10 +51,10 @@ import org.apache.spark.sql.streaming.ProcessingTime;
  writer.trigger(new ProcessingTime(30000)).start(tablePath);
 ```
 
-### DeltaStreamer Continuous Mode
+### Scheduling Compaction with DeltaStreamer Continuous Mode
 Hudi DeltaStreamer provides continuous ingestion mode where a single long running spark application  
-ingests data to Hudi table continuously from upstream sources. In this mode, Hudi supports managing asynchronous
-compactions. Here is an example snippet for running in continuous mode with async compactions
+ingests data to Hudi table continuously from upstream sources. In this mode, Hudi supports scheduling asynchronous
+compactions. Here is an example snippet for running in continuous mode with async compactions:
 
 ```properties
 spark-submit --packages org.apache.hudi:hudi-utilities-bundle_2.11:0.6.0 \
@@ -74,22 +69,46 @@ spark-submit --packages org.apache.hudi:hudi-utilities-bundle_2.11:0.6.0 \
 --continous
 ```
 
-### Hudi CLI
-Hudi CLI is yet another way to execute specific compactions asynchronously. Here is an example
+## Executing Async Compaction
+After compactions have been asynchronously scheduled on the Hudi Timeline, you can now execute those compactions with one of the following options
 
-```properties
-hudi:trips->compaction run --tableName <table_name> --parallelism <parallelism> --compactionInstant <InstantTime>
-...
-```
+### Hudi Compactor Utility
+Hudi provides a standalone tool to execute specific compactions asynchronously. Below is an example and you can read more in the [deployment guide](/docs/deployment#compactions)
 
-### Hudi Compactor Script
-Hudi provides a standalone tool to also execute specific compactions asynchronously. Below is an example and you can read more in the [deployment guide](/docs/next/deployment#compactions)
+:::info
+Note: As of version 0.10.0, the `instant-time` parameter is no longer required for the Hudi Compactor Utility. Each spark-submit will execute the earliest scheduled compaction on the Hudi timeline.
+:::
 
 ```properties
 spark-submit --packages org.apache.hudi:hudi-utilities-bundle_2.11:0.6.0 \
 --class org.apache.hudi.utilities.HoodieCompactor \
 --base-path <base_path> \
 --table-name <table_name> \
---instant-time <compaction_instant> \
---schema-file <schema_file>
+--schema-file <schema_file>\
+--instant-time <compaction_instant>
 ```
+
+### Hudi CLI
+Hudi CLI is yet another way to execute specific compactions asynchronously. Here is an example and you can read more in the [deployment guide](/docs/deployment#compactions)
+
+```properties
+hudi:trips->compaction run --tableName <table_name> --parallelism <parallelism> --compactionInstant <InstantTime>
+...
+```
+
+## Synchronous Compaction
+By default, compaction is run asynchronously.
+
+If latency of ingesting records is important for you, you are most likely using Merge-On-Read tables.
+Merge-On-Read tables store data using a combination of columnar (e.g parquet) + row based (e.g avro) file formats.
+Updates are logged to delta files & later compacted to produce new versions of columnar files. 
+To improve ingestion latency, Async Compaction is the default configuration.
+
+If immediate read performance of a new commit is important for you, or you want simplicity of not managing separate compaction jobs,
+you may want Synchronous compaction, which means that as a commit is written it is also compacted by the same job.
+
+Compaction is run in synchronously by passing the flag "--disable-compaction" (Meaning to disable async compaction scheduling).
+When both ingestion and compaction is running in the same spark context, you can use resource allocation configuration 
+in DeltaStreamer CLI such as ("--delta-sync-scheduling-weight",
+"--compact-scheduling-weight", ""--delta-sync-scheduling-minshare", and "--compact-scheduling-minshare")
+to control executor allocation between ingestion and compaction.
