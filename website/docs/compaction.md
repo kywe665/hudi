@@ -5,7 +5,6 @@ last_modified_at:
 ---
 
 Compaction is executed asynchronously with Hudi by default. See the [synchronous compaction](/docs/compaction##synchronous-compaction)
-section below if you want to override the default.   
 
 ## Async Compaction
 Async Compaction is performed in 2 steps:
