@@ -5,7 +5,7 @@ last_modified_at:
 ---
 
 Compaction is executed asynchronously with Hudi by default. See the [synchronous compaction](/docs/compaction##synchronous-compaction)
-section below if you want to change that default.   
+section below if you want to override the default.   
 
 ## Async Compaction
 Async Compaction is performed in 2 steps:
@@ -17,7 +17,6 @@ Async Compaction is performed in 2 steps:
 ## Scheduling Async Compaction
 
 There are few ways by which we can schedule compactions to the Hudi timeline to be executed later asynchronously.
-(Note we can still execute synchronously)
 
 ### Schedule compaction with Spark Structured Streaming
 
